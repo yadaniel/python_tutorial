@@ -14,6 +14,13 @@
 // Kd*(e[0]-e[-1])/Ts will contribute 10 times to yout ... assuming linear e[k]
 // yout' = yout/10
 
+// PID controller design techniques
+// zigler nichols method 1: use step response, find Kp critical and readout Tp => use table for Kp,Ki,Kd parameters
+// zigler nichols method 2: use step response, find turn tangent in response, readout Tdel and a => use table for Kp,Ki,Kd parameters
+// zigler nichols method 2a: use step response and wait until steady state, find DC-gain K, scale down to 0.63K and find out T63
+// pole placement
+// root locus
+
 const int16_t Kp = 1;
 const int16_t Ki = 1;
 const int16_t Kd = 1;
@@ -28,11 +35,33 @@ uint16_t pid_step(int16_t xset, int16_t xnew) {
     static uint8_t k = 0;
     int16_t yout = 0;
 
+    // <debug>
+
+    // e[k]
+    printf("\ne[64]={");
+    for(int i=0; i<64; i++) {
+        printf("%i,", e[i]);
+    }
+    printf("}\n");
+
+    // x[k]
+    printf("x[64]={");
+    for(int i=0; i<64; i++) {
+        printf("%i,", x[i]);
+    }
+    printf("}\n");
+
+    // xs
+    printf("xs=%i\n", xs);
+
+    // </debug>
+
     x[k] = xnew;
     e[k] = xset - x[k];
     //
     xs += Ki*e[k];
-    yout = Kp*e[k] + xs + Kd*(e[k] - e[(k-1) & 63])*fs;
+    /* yout = Kp*e[k] + xs + Kd*(e[k] - e[(k-1) & 63])*fs; */
+    yout = Kp*e[k] + xs;
     if (yout > 0x03FF) {    // 10bit DAC
         yout = 0x03FF;      // yout = min(yout, 2**10)
     }
@@ -43,20 +72,35 @@ uint16_t pid_step(int16_t xset, int16_t xnew) {
     return yout;            // write to DAC
 }
 
+// nanosleep
+void test(void) {
+    struct timespec t0, t1;
+    t0.tv_sec = 3;
+    t0.tv_nsec = 500000000;
+    if(nanosleep(&t0, &t1) < 0) {
+        printf("1 ");
+    } else {
+        printf("2 ");
+    }
+    printf("%lu:[+%0.4f]\n", t1.tv_sec, t1.tv_nsec);
+}
+
 int main(void) {
     struct timespec t;
     uint16_t yout;
+    /* test(); */
+    /* return 1; */
     while(1) {
         clock_gettime(CLOCK_REALTIME, &t);
         printf("%lu:[+%.04f]:%09lu:", t.tv_sec, t.tv_nsec/1e9, t.tv_nsec);
         //
-        yout = pid_step(1, 0);
+        yout = pid_step(6, 1);
         printf("%i\n", yout);
         //
         /* usleep(100);        // 100us */
         /* usleep(1000);       // 1000us = 1ms */
-        usleep(10000);      // 10_000us = 10ms
-        /* usleep(100000);     // 100_000us = 100ms */
+        /* usleep(10000);      // 10_000us = 10ms */
+        usleep(100000);     // 100_000us = 100ms
         /* usleep(1000000);    // 1000_000us = 1000ms */
     }
 }
